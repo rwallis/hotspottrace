@@ -1,20 +1,8 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import "leaflet/dist/leaflet.css";
-import { MapContainer, TileLayer, Marker, Popup, Circle } from "react-leaflet";
-import L from "leaflet";
-
-const DefaultIcon = L.icon({
-  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowSize: [41, 41],
-});
-L.Marker.prototype.options.icon = DefaultIcon;
+import { MapContainer, TileLayer, Circle, Popup } from "react-leaflet";
 
 export type Hotspot = {
   id: string;
@@ -22,17 +10,20 @@ export type Hotspot = {
   lat: number;
   lon: number;
   avgClimbKts: number;
-  count: number;
+  count: number;   // occurrences
   pilot: string;
+  flights?: string[];
 };
 
-export default function HotspotMap({
-  hotspots,
-  initialView,
-}: {
+type Props = {
   hotspots: Hotspot[];
+  /** [lat, lon, zoom] */
   initialView?: [number, number, number];
-}) {
+};
+
+export default function HotspotMap({ hotspots, initialView }: Props) {
+  const [selected, setSelected] = useState<Hotspot | null>(null);
+
   const center = useMemo<[number, number, number]>(() => {
     if (initialView) return initialView;
     if (hotspots.length) {
@@ -45,36 +36,65 @@ export default function HotspotMap({
 
   return (
     <div className="h-[70vh] w-full overflow-hidden rounded-2xl border shadow-sm">
-      <MapContainer center={[center[0], center[1]]} zoom={center[2]} scrollWheelZoom className="h-full w-full">
+      <MapContainer
+        center={[center[0], center[1]]}
+        zoom={center[2]}
+        scrollWheelZoom
+        className="h-full w-full"
+      >
         <TileLayer
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
         />
+
         {hotspots.map((h) => {
-          const radiusMeters = Math.max(150, 150 * h.avgClimbKts);
+          // radius ~ strength
+          const radiusMeters = Math.max(180, 160 * h.avgClimbKts);
+          // deterministic hue per pilot
           const hue = [...h.pilot].reduce((a, c) => (a + c.charCodeAt(0)) % 360, 0);
           const color = `hsl(${hue} 90% 45%)`;
+
           return (
-            <Marker key={h.id} position={[h.lat, h.lon]}>
-              <Popup>
-                <div className="text-sm">
-                  <div className="font-semibold">{h.name}</div>
-                  <div>Avg climb: {h.avgClimbKts.toFixed(1)} kt</div>
-                  <div>Samples: {h.count}</div>
-                  <div>Pilot: {h.pilot}</div>
-                  <div className="mt-1 text-xs opacity-70">
-                    {h.lat.toFixed(5)}, {h.lon.toFixed(5)}
-                  </div>
-                </div>
-              </Popup>
-              <Circle
-                center={[h.lat, h.lon]}
-                radius={radiusMeters}
-                pathOptions={{ color, fillColor: color, fillOpacity: 0.2 }}
-              />
-            </Marker>
+            <Circle
+              key={h.id}
+              center={[h.lat, h.lon]}
+              radius={radiusMeters}
+              pathOptions={{
+                color,
+                weight: 2,
+                fillColor: color,
+                fillOpacity: 0.25,
+              }}
+              eventHandlers={{
+                click: () => setSelected(h),
+              }}
+            />
           );
         })}
+
+        {/* Single popup rendered at map level to avoid timing issues */}
+        {selected && (
+          <Popup
+            position={[selected.lat, selected.lon]}
+            // Close when user clicks the X or outside
+            eventHandlers={{ remove: () => setSelected(null) }}
+          >
+            <div className="text-sm">
+              <div className="font-semibold">{selected.name}</div>
+              <div>Avg climb: {selected.avgClimbKts.toFixed(2)} kt</div>
+              <div>Occurrences: {selected.count}</div>
+              <div>Pilot: {selected.pilot}</div>
+              {selected.flights?.length ? (
+                <div className="mt-1 text-xs opacity-70">
+                  Flights: {selected.flights.join(", ")}
+                </div>
+              ) : null}
+              <div className="mt-1 text-xs opacity-60">
+                {selected.lat.toFixed(5)}, {selected.lon.toFixed(5)}
+              </div>
+            </div>
+          </Popup>
+        )}
       </MapContainer>
     </div>
   );
