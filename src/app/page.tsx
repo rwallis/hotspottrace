@@ -7,14 +7,12 @@ import hotspotsJson from "@/data/hotspots.json";
 import thermalsJson from "@/data/thermals.json";
 
 export default function Page() {
-  // UI state
-  const [showList, setShowList] = useState(false); // default hidden (full-screen map)
-  const [selectedPilots, setSelectedPilots] = useState<string[]>([]); // multi-select
+  const [showList, setShowList] = useState(false);          // default hidden (full-screen map)
+  const [selectedPilots, setSelectedPilots] = useState<string[]>([]);
+  const [selectedHotspotId, setSelectedHotspotId] = useState<string | null>(null);
 
-  // Raw data
   const thermals = thermalsJson as Thermal[];
 
-  // Base hotspots (apply <= 15 kt rule first)
   const baseHotspots = useMemo(
     () =>
       (hotspotsJson as Hotspot[])
@@ -23,30 +21,29 @@ export default function Page() {
     []
   );
 
-  // All possible pilot tags
   const allPilots = useMemo(
     () => Array.from(new Set(baseHotspots.map((h) => h.pilot))),
     [baseHotspots]
   );
 
-  // Filter by selected pilots (if any selected)
   const filteredHotspots = useMemo(() => {
     if (selectedPilots.length === 0) return baseHotspots;
     const set = new Set(selectedPilots);
     return baseHotspots.filter((h) => set.has(h.pilot));
   }, [baseHotspots, selectedPilots]);
 
-  // tag UI helpers
   function togglePilot(p: string) {
     setSelectedPilots((prev) =>
       prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p]
     );
+    // Clear selection if it no longer matches filters
+    setSelectedHotspotId(null);
   }
   function clearPilots() {
     setSelectedPilots([]);
+    setSelectedHotspotId(null);
   }
 
-  // shared tag bar (shown in both modes)
   const TagBar = (
     <div className="flex flex-wrap items-center gap-2">
       <span className="text-sm font-medium">Pilots:</span>
@@ -69,7 +66,7 @@ export default function Page() {
       })}
       <button
         onClick={clearPilots}
-        className="ml-1 rounded-full border px-3 py-1 text-sm hover:shadow"
+        className="ml-1 rounded-full border px-3 py-1 text-sm hover:shadow disabled:opacity-50"
         disabled={selectedPilots.length === 0}
         title="Clear all filters"
       >
@@ -77,24 +74,20 @@ export default function Page() {
       </button>
 
       <span className="ml-2 text-xs opacity-60">
-        Showing {filteredHotspots.length} of {baseHotspots.length} hotspots ·{" "}
-        {thermals.length} thermals
+        Showing {filteredHotspots.length} of {baseHotspots.length} hotspots · {thermals.length} thermals
       </span>
     </div>
   );
 
   return (
     <main className="min-h-dvh">
-      {/* Header (fixed so map can be full-screen behind it) */}
+      {/* Fixed header */}
       <header className="fixed inset-x-0 top-0 z-30 border-b bg-white/80 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
           <div className="flex items-center gap-4">
-            <h1 className="text-2xl font-bold">Hotspots</h1>
-            <div className="hidden text-sm opacity-70 md:block">
-              Thermal Hotspots Explorer
-            </div>
+            <h1 className="text-2xl font-bold">hotspottrace</h1>
+            <div className="hidden text-sm opacity-70 md:block">Thermal Hotspots Explorer</div>
           </div>
-
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowList((s) => !s)}
@@ -105,38 +98,43 @@ export default function Page() {
             </button>
           </div>
         </div>
-
-        {/* Tag bar is part of the fixed header region so it's available in both modes */}
         <div className="mx-auto max-w-6xl px-4 pb-3">{TagBar}</div>
       </header>
 
       {/* CONTENT */}
       {!showList ? (
-        /* Full-browser map under the fixed header + tag bar */
+        // Full-browser map
         <div className="fixed inset-0 z-10">
-          {/* Top padding = header(56-60px) + tag bar area (~44px) */}
           <div className="absolute inset-0 pt-[104px] md:pt-[108px]">
-            <HotspotMapClient hotspots={filteredHotspots} fullHeight />
+            <HotspotMapClient
+              hotspots={filteredHotspots}
+              fullHeight
+              selectedHotspotId={selectedHotspotId}
+              onSelectHotspot={setSelectedHotspotId}
+            />
           </div>
         </div>
       ) : (
-        /* Split layout with list + map */
+        // Split: list + map
         <section className="mx-auto max-w-6xl px-4 pt-[120px] pb-6">
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-            {/* Left: hotspot cards */}
+            {/* Left: hotspot cards that now control the map */}
             <div className="lg:col-span-1">
               <div className="space-y-3">
                 {filteredHotspots.map((h) => {
-                  const hue = [...h.pilot].reduce(
-                    (a, c) => (a + c.charCodeAt(0)) % 360,
-                    0
-                  );
+                  const hue = [...h.pilot].reduce((a, c) => (a + c.charCodeAt(0)) % 360, 0);
                   const color = `hsl(${hue} 90% 45%)`;
+                  const isSelected = h.id === selectedHotspotId;
 
                   return (
-                    <article
+                    <button
                       key={h.id}
-                      className="rounded-2xl border p-4 shadow-sm"
+                      type="button"
+                      onClick={() => setSelectedHotspotId(h.id)}
+                      className={[
+                        "w-full text-left rounded-2xl border p-4 shadow-sm transition",
+                        isSelected ? "ring-2 ring-black" : "hover:shadow-md",
+                      ].join(" ")}
                     >
                       <div className="flex items-start justify-between">
                         <h3 className="font-semibold">{h.name}</h3>
@@ -152,9 +150,7 @@ export default function Page() {
                       <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
                         <div>
                           <div className="opacity-60">Avg climb</div>
-                          <div className="font-semibold">
-                            {h.avgClimbKts.toFixed(2)} kt
-                          </div>
+                          <div className="font-semibold">{h.avgClimbKts.toFixed(2)} kt</div>
                         </div>
                         <div>
                           <div className="opacity-60">Occurrences</div>
@@ -163,11 +159,9 @@ export default function Page() {
                       </div>
 
                       {h.flights?.length ? (
-                        <div className="mt-2 text-xs opacity-70 truncate">
-                          Flights: {h.flights.join(", ")}
-                        </div>
+                        <div className="mt-2 text-xs opacity-70 truncate">Flights: {h.flights.join(", ")}</div>
                       ) : null}
-                    </article>
+                    </button>
                   );
                 })}
 
@@ -179,9 +173,13 @@ export default function Page() {
               </div>
             </div>
 
-            {/* Right: map */}
+            {/* Right: map (controlled by selectedHotspotId) */}
             <div className="lg:col-span-2">
-              <HotspotMapClient hotspots={filteredHotspots} />
+              <HotspotMapClient
+                hotspots={filteredHotspots}
+                selectedHotspotId={selectedHotspotId}
+                onSelectHotspot={setSelectedHotspotId}
+              />
             </div>
           </div>
         </section>
