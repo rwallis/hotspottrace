@@ -90,7 +90,7 @@ export default function Page() {
       <header className="fixed inset-x-0 top-0 z-30 border-b bg-white/80 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
           <div className="flex items-center gap-4">
-            <h1 className="text-2xl font-bold">hotspots</h1>
+            <h1 className="text-2xl font-bold">Hotspots</h1>
             <div className="hidden text-sm opacity-70 md:block">Thermal Hotspots Explorer</div>
           </div>
           <div className="flex items-center gap-2">
