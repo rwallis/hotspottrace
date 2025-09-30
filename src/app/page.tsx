@@ -7,12 +7,14 @@ import hotspotsJson from "@/data/hotspots.json";
 import thermalsJson from "@/data/thermals.json";
 
 export default function Page() {
-  const [showList, setShowList] = useState(false);          // default hidden (full-screen map)
+  // default hidden (full-screen map)
+  const [showList, setShowList] = useState(false);
   const [selectedPilots, setSelectedPilots] = useState<string[]>([]);
   const [selectedHotspotId, setSelectedHotspotId] = useState<string | null>(null);
 
   const thermals = thermalsJson as Thermal[];
 
+  // Base hotspots with ≤ 15 kt
   const baseHotspots = useMemo(
     () =>
       (hotspotsJson as Hotspot[])
@@ -21,22 +23,24 @@ export default function Page() {
     []
   );
 
+  // All pilot tags
   const allPilots = useMemo(
     () => Array.from(new Set(baseHotspots.map((h) => h.pilot))),
     [baseHotspots]
   );
 
+  // Filter by selected pilots (if any)
   const filteredHotspots = useMemo(() => {
     if (selectedPilots.length === 0) return baseHotspots;
     const set = new Set(selectedPilots);
     return baseHotspots.filter((h) => set.has(h.pilot));
   }, [baseHotspots, selectedPilots]);
 
+  // Tag interactions
   function togglePilot(p: string) {
     setSelectedPilots((prev) =>
       prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p]
     );
-    // Clear selection if it no longer matches filters
     setSelectedHotspotId(null);
   }
   function clearPilots() {
@@ -44,6 +48,7 @@ export default function Page() {
     setSelectedHotspotId(null);
   }
 
+  // Shared tag bar (shown below header in both modes)
   const TagBar = (
     <div className="flex flex-wrap items-center gap-2">
       <span className="text-sm font-medium">Pilots:</span>
@@ -81,7 +86,7 @@ export default function Page() {
 
   return (
     <main className="min-h-dvh">
-      {/* Fixed header */}
+      {/* Fixed header (so map can be full-screen behind it in hidden-list mode) */}
       <header className="fixed inset-x-0 top-0 z-30 border-b bg-white/80 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
           <div className="flex items-center gap-4">
@@ -103,8 +108,9 @@ export default function Page() {
 
       {/* CONTENT */}
       {!showList ? (
-        // Full-browser map
+        /* Full-browser map below the fixed header + tag bar */
         <div className="fixed inset-0 z-10">
+          {/* top padding to clear header + tag bar (tweak if your header height changes) */}
           <div className="absolute inset-0 pt-[104px] md:pt-[108px]">
             <HotspotMapClient
               hotspots={filteredHotspots}
@@ -115,11 +121,18 @@ export default function Page() {
           </div>
         </div>
       ) : (
-        // Split: list + map
+        /* Split layout: scrollable left column, sticky map on right */
         <section className="mx-auto max-w-6xl px-4 pt-[120px] pb-6">
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-            {/* Left: hotspot cards that now control the map */}
-            <div className="lg:col-span-1">
+            {/* LEFT: scrollable cards (independent scrolling) */}
+            <div
+              className="lg:col-span-1"
+              /* make the column a scroll container that fits under the header+tags */
+              style={{
+                maxHeight: "calc(100dvh - 120px)",
+                overflowY: "auto",
+              }}
+            >
               <div className="space-y-3">
                 {filteredHotspots.map((h) => {
                   const hue = [...h.pilot].reduce((a, c) => (a + c.charCodeAt(0)) % 360, 0);
@@ -173,13 +186,22 @@ export default function Page() {
               </div>
             </div>
 
-            {/* Right: map (controlled by selectedHotspotId) */}
+            {/* RIGHT: sticky map that stays on screen */}
             <div className="lg:col-span-2">
-              <HotspotMapClient
-                hotspots={filteredHotspots}
-                selectedHotspotId={selectedHotspotId}
-                onSelectHotspot={setSelectedHotspotId}
-              />
+              <div
+                className="sticky"
+                style={{
+                  top: "120px",                       // same as the section's top padding
+                  height: "calc(100dvh - 120px)",     // fill remaining viewport height
+                }}
+              >
+                <HotspotMapClient
+                  hotspots={filteredHotspots}
+                  selectedHotspotId={selectedHotspotId}
+                  onSelectHotspot={setSelectedHotspotId}
+                  fullHeight
+                />
+              </div>
             </div>
           </div>
         </section>
