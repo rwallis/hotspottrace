@@ -3,25 +3,16 @@
 import { useMemo, useState } from "react";
 import "leaflet/dist/leaflet.css";
 import { MapContainer, TileLayer, Circle, Popup } from "react-leaflet";
-
-export type Hotspot = {
-  id: string;
-  name: string;
-  lat: number;
-  lon: number;
-  avgClimbKts: number;
-  count: number;   // occurrences
-  pilot: string;
-  flights?: string[];
-};
+import type { Hotspot } from "@/types"; // ← use the shared type
 
 type Props = {
   hotspots: Hotspot[];
   /** [lat, lon, zoom] */
   initialView?: [number, number, number];
+  fullHeight?: boolean;
 };
 
-export default function HotspotMap({ hotspots, initialView }: Props) {
+export default function HotspotMap({ hotspots, initialView, fullHeight }: Props) {
   const [selected, setSelected] = useState<Hotspot | null>(null);
 
   const center = useMemo<[number, number, number]>(() => {
@@ -35,22 +26,13 @@ export default function HotspotMap({ hotspots, initialView }: Props) {
   }, [hotspots, initialView]);
 
   return (
-    <div className="h-[70vh] w-full overflow-hidden rounded-2xl border shadow-sm">
-      <MapContainer
-        center={[center[0], center[1]]}
-        zoom={center[2]}
-        scrollWheelZoom
-        className="h-full w-full"
-      >
-        <TileLayer
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
-        />
+    <div className={fullHeight ? "h-full w-full" : "h-[70vh] w-full overflow-hidden rounded-2xl border shadow-sm"}>
+      <MapContainer center={[center[0], center[1]]} zoom={center[2]} scrollWheelZoom className="h-full w-full">
+        <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                   attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>' />
 
         {hotspots.map((h) => {
-          // radius ~ strength
           const radiusMeters = Math.max(180, 160 * h.avgClimbKts);
-          // deterministic hue per pilot
           const hue = [...h.pilot].reduce((a, c) => (a + c.charCodeAt(0)) % 360, 0);
           const color = `hsl(${hue} 90% 45%)`;
 
@@ -59,35 +41,21 @@ export default function HotspotMap({ hotspots, initialView }: Props) {
               key={h.id}
               center={[h.lat, h.lon]}
               radius={radiusMeters}
-              pathOptions={{
-                color,
-                weight: 2,
-                fillColor: color,
-                fillOpacity: 0.25,
-              }}
-              eventHandlers={{
-                click: () => setSelected(h),
-              }}
+              pathOptions={{ color, weight: 2, fillColor: color, fillOpacity: 0.25 }}
+              eventHandlers={{ click: () => setSelected(h) }}
             />
           );
         })}
 
-        {/* Single popup rendered at map level to avoid timing issues */}
         {selected && (
-          <Popup
-            position={[selected.lat, selected.lon]}
-            // Close when user clicks the X or outside
-            eventHandlers={{ remove: () => setSelected(null) }}
-          >
+          <Popup position={[selected.lat, selected.lon]} eventHandlers={{ remove: () => setSelected(null) }}>
             <div className="text-sm">
               <div className="font-semibold">{selected.name}</div>
               <div>Avg climb: {selected.avgClimbKts.toFixed(2)} kt</div>
               <div>Occurrences: {selected.count}</div>
               <div>Pilot: {selected.pilot}</div>
               {selected.flights?.length ? (
-                <div className="mt-1 text-xs opacity-70">
-                  Flights: {selected.flights.join(", ")}
-                </div>
+                <div className="mt-1 text-xs opacity-70">Flights: {selected.flights.join(", ")}</div>
               ) : null}
               <div className="mt-1 text-xs opacity-60">
                 {selected.lat.toFixed(5)}, {selected.lon.toFixed(5)}
